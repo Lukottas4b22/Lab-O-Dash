@@ -1,0 +1,432 @@
+<!DOCTYPE html><html><head><title>Ghost Mansion Puzzle</title><meta http-equiv="content-type" content="text/html; charset=UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui=1"><meta charset="UTF-8"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="description" content=""><link rel="manifest" href="manifest.json"><link rel="icon" type="image/png" href="icon64.png"><link rel="apple-touch-icon" sizes="180x180" href="icon180.png"><link rel="icon" type="image/png" sizes="32x32" href="icon32.png"><link rel="icon" type="image/png" sizes="16x16" href="icon16.png"><style>html,body {
+  margin: 0;
+  padding: 0;
+  background-color: #000;
+  overflow:hidden;
+  font-family: Verdana;
+}
+.noselect {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+#canvaswrapper {
+  text-align: center ;
+}
+</style><style>@font-face { font-family: "BitCell" ; src: url("fonts/BitCell.ttf") format("truetype"); }</style><script>window.fonts = ["BitCell"]</script></head><body class="noselect custom-cursor" oncontextmenu="return false;"><div id="canvaswrapper"></div><script type="text/javascript">var resources = {"images":[{"file":"cursed_chair.png","version":1,"size":1159510,"properties":{}},{"file":"glas.png","version":7,"size":203,"properties":{"frames":1,"fps":5}},{"file":"icon.png","version":0,"size":0,"properties":{}}],"assets":[],"maps":{},"sounds":[{"file":"boughtsucess.wav","version":1,"size":345398,"properties":{}},{"file":"dificultysetting.wav","version":1,"size":264132,"properties":{}},{"file":"gameover.wav","version":1,"size":294730,"properties":{}},{"file":"newcoin.wav","version":1,"size":201240,"properties":{}},{"file":"yay.wav","version":1,"size":345398,"properties":{}}],"music":[]};
+var graphics = "M1";
+
+</script><script type="text/javascript">var orientation = 'portrait' ;
+var aspect = 'free' ;
+var ms_libs = [] ;
+window.skip_service_worker = true;
+window.exported_project = true;
+window.ms_use_server = false ;
+</script><script src="compiler.js"></script><script src="parser.js"></script><script src="processor.js"></script><script src="program.js"></script><script src="routine.js"></script><script src="runner.js"></script><script src="token.js"></script><script src="tokenizer.js"></script><script src="transpiler.js"></script><script src="microengine.js"></script></body><script type="text/javascript">//
+//
+// The game is started with the code below.
+// Once you have received the "started" signal (see below),
+// you can do the following:
+// 1) Inject functions or objects into the global context of the microStudio engine, example:
+//
+//   window.player.setGlobal("special_callback",function(x) { console.info(x) }) ;
+//   // Your microScript code can now call the "special_callback" function
+//
+// 2) Call microScript global functions from your JavaScript code, example:
+//
+//   window.player.call("call_me_from_javascript",[10,1000]) ;
+//   // arguments to the function call are provided as an array
+//
+// 3) Run a microScript code snippet from your JavaScript code, example:
+//
+//   window.player.exec("player.position_x = 50",function(result) { console.log(result) ; }) ;
+//
+
+window.addEventListener("load",function() {
+  window.player = new Player(function(event) {
+    if (event.name == "started") {
+      // signal that the game is started
+    }
+    else if (event.name == "log") {
+      // console.info(event.data) ;
+    }
+  }) ;
+  document.body.focus() ;
+}) ;
+
+</script><script id="code" type="text/x-microscript">
+
+
+// file: main.ms
+function()
+//------------------------------------------------
+// INIT
+//------------------------------------------------
+init = function()
+  state = "MENU"
+  score = 0
+
+  // SPEICHER LADEN
+  coins = storage.get("coins")
+  if coins == undefined then coins = 0 end
+
+  highscore = storage.get("best_score")
+  if highscore == undefined then highscore = 0 end
+
+  owned_skin = storage.get("skin")
+  if owned_skin == undefined then owned_skin = 0 end
+
+  owned_background = storage.get("background")
+  if owned_background == undefined then owned_background = 0 end
+
+  last_daily_claim_day = storage.get("daily_claim_day")
+  if last_daily_claim_day == undefined then last_daily_claim_day = -1 end
+
+  daily_reward = 100
+
+  // PLAYER SETUP
+  balken_w = 20
+  balken_h = 35
+  player_x = 0
+  player_y = -screen.height/2 + 80
+  player_color_index = 0
+
+  grace_period = 0
+  change_timer = 0
+  spawn_timer = 0
+
+  objects = []
+
+  colors = ["#FF0000","#0000FF","#FFFF00"]
+  skins = ["#e0ac69","#9b59b6","#1abc9c"]
+
+  multiplier = 1
+  hit_counter = 0
+  max_multiplier = 5
+  multi_active = false
+
+  ad_cooldown = 0
+
+  // MEILENSTEIN TRACKING
+  last_score_milestone = 0
+end
+
+//------------------------------------------------
+// BUTTON CHECK
+//------------------------------------------------
+buttonPressed = function(x,y,w,h)
+  return mouse.press and
+  mouse.x > x-w/2 and mouse.x < x+w/2 and
+  mouse.y > y-h/2 and mouse.y < y+h/2
+end
+
+//------------------------------------------------
+// DAILY REWARD
+//------------------------------------------------
+currentDay = function()
+  local t = system.time
+  if t > 10000000000 then
+    return floor(t/86400000)
+  end
+  return floor(t/86400)
+end
+
+dailyRewardAvailable = function()
+  return currentDay() > last_daily_claim_day
+end
+
+claimDailyReward = function()
+  if not dailyRewardAvailable() then return end
+  last_daily_claim_day = currentDay()
+  coins += daily_reward
+  audio.playSound("newcoin")
+  storage.set("coins", coins)
+  storage.set("daily_claim_day", last_daily_claim_day)
+end
+
+//------------------------------------------------
+// DIFFICULTY / NEUSTART
+//------------------------------------------------
+setDifficulty = function(level)
+  if level == "LEICHT" then
+    fall_speed = 1.2
+    spawn_interval = 80
+    change_interval = 300
+    multi_active = false
+  elsif level == "NORMAL" then
+    fall_speed = 1.8
+    spawn_interval = 60
+    change_interval = 200
+    multi_active = false
+  elsif level == "SCHWER" then
+    fall_speed = 2.5
+    spawn_interval = 45
+    change_interval = 150
+    multi_active = true
+  elsif level == "EXPERTE" then
+    fall_speed = 3.5
+    spawn_interval = 30
+    change_interval = 110
+    multi_active = true
+  end
+
+  score = 0
+  last_score_milestone = 0
+  multiplier = 1
+  hit_counter = 0
+  objects = []
+  change_timer = 0
+  spawn_timer = 0
+  state = "GAME"
+  audio.playSound( "dificultysetting")
+end
+
+//------------------------------------------------
+// UPDATE
+//------------------------------------------------
+update = function()
+  if ad_cooldown > 0 then ad_cooldown -= 1 end
+
+  // MENU
+  if state == "MENU" then
+    if buttonPressed(0,40,180,50) then
+      state = "DIFFICULTY_SELECT"
+    end
+    if buttonPressed(0,-20,180,50) then
+      state = "SHOP"
+    end
+    if buttonPressed(0,-80,200,40) then
+      claimDailyReward()
+    end
+
+  // DIFFICULTY SELECT
+  elsif state == "DIFFICULTY_SELECT" then
+    if buttonPressed(0,60,200,40) then setDifficulty("LEICHT") end
+    if buttonPressed(0,20,200,40) then setDifficulty("NORMAL") end
+    if buttonPressed(0,-20,200,40) then setDifficulty("SCHWER") end
+    if buttonPressed(0,-60,200,40) then setDifficulty("EXPERTE") end
+    if buttonPressed(0,-120,160,40) then state="MENU" end  // ← Zurück-Button
+
+  // SHOP
+  elsif state == "SHOP" then
+    if buttonPressed(0,-120,160,40) then state="MENU" end  // ← Zurück-Button
+
+    if buttonPressed(0,40,200,40) and coins>=150 then
+      owned_skin = 1
+      coins -= 150
+      audio.playSound("boughtsucess")
+    end
+    if buttonPressed(0,0,200,40) and coins>=300 then
+      owned_skin = 2
+      coins -= 300
+      audio.playSound("boughtsucess")
+    end
+    if buttonPressed(0,-40,200,40) and ad_cooldown<=0 then
+      coins += 50
+      audio.playSound("boughtsucess")
+      ad_cooldown = 600
+    end
+    if buttonPressed(0,-80,200,40) and coins>=500 then
+      owned_background = 1
+      coins -= 500
+      audio.playSound("boughtsucess")
+    end
+
+    storage.set("coins",coins)
+    storage.set("skin",owned_skin)
+    storage.set("background",owned_background)
+
+  // GAME LOGIK
+  elsif state == "GAME" then
+    player_x = mouse.x
+    if grace_period>0 then grace_period -=1 end
+
+    // BELOHNUNGS-LOGIK
+    if score >= last_score_milestone + 50 then
+      last_score_milestone += 50
+      coins += 10
+      audio.playSound("boughtsucess")
+      storage.set("coins", coins)
+    end
+
+    change_timer +=1
+    if change_timer > change_interval then
+      change_timer = 0
+      grace_period = 40
+      local n = player_color_index
+      while n == player_color_index
+        n = floor(random.next()*3)
+      end
+      player_color_index = n
+    end
+
+    spawn_timer +=1
+    if spawn_timer > spawn_interval then
+      spawn_timer = 0
+      local o = object
+        x = random.next()*screen.width - screen.width/2
+        y = screen.height/2+20
+        c = floor(random.next()*3)
+      end
+      objects.push(o)
+    end
+
+    for i = objects.length-1 to 0 by -1
+      local o = objects[i]
+      o.y -= fall_speed
+
+      // KOLLISIONS-LOGIK
+      if abs(o.y-player_y)<25 and abs(o.x-player_x)<25 then
+        if o.c == player_color_index or grace_period>0 then
+          score += floor(10*multiplier)
+          objects.removeAt(i)
+          audio.playSound("yay")
+
+          // MULTIPLIKATOR LOGIK nur bei SCHWER/EXPERTE
+          if multi_active and o.c == player_color_index then
+            hit_counter +=1
+            if hit_counter >= 3 then
+              hit_counter = 0
+              if multiplier < max_multiplier then
+                multiplier += 0.5
+              end
+            end
+          end
+
+        else
+          multiplier = 1
+          hit_counter = 0
+          state="GAMEOVER"
+          audio.playSound("gameover")
+          if score > highscore then
+            highscore = score
+            storage.set("best_score", highscore)
+          end
+        end
+
+      // Kugel übersprungen
+      elsif o.y < -screen.height/2-30 then
+        if multi_active and o.c == player_color_index then
+          multiplier = 1
+          hit_counter = 0
+        end
+        objects.removeAt(i)
+      end
+    end
+  end
+
+  // GAMEOVER
+  if state == "GAMEOVER" and mouse.press then state="MENU" end
+end
+
+//------------------------------------------------
+// DRAW
+//------------------------------------------------
+draw = function()
+  -- HINTERGRUND
+  if owned_background == 1 then
+      screen.fillRect(0,0,screen.width,screen.height,"#eceff1")
+     // -- Details wie Fenster, Regale, Tisch bleiben wie gehabt
+  else
+      screen.clear("#1a1a2e")
+  end
+
+  -- COINS
+  screen.drawText("🪙 "+coins,screen.width/2-70,screen.height/2-20,12,"#f1c40f")
+
+  -- MULTIPLIKATOR
+  if multi_active and multiplier > 1 then
+    screen.drawText("x"+multiplier,screen.width/2-70,screen.height/2-35,14,"#ffd700")
+  end
+
+  -- MENU
+  if state == "MENU" then
+    screen.drawText("LAB-O-DASH",0,110,30,"#00ff41")
+    screen.fillRect(0,40,180,50,"#2ecc71")
+    screen.drawText("START",0,40,18,"white")
+    screen.fillRect(0,-20,180,50,"#3498db")
+    screen.drawText("SHOP",0,-20,18,"white")
+    if dailyRewardAvailable() then
+      screen.fillRect(0,-80,200,40,"#f39c12")
+      screen.drawText("DAILY COINS +"+daily_reward,0,-80,12,"black")
+    else
+      screen.drawText("NEXT DAILY: TOMORROW",0,-80,12,"#777")
+    end
+    screen.drawText("BEST: "+highscore,0,-120,12,"#aaa")
+
+  -- DIFFICULTY SELECT
+  elsif state == "DIFFICULTY_SELECT" then
+    screen.drawText("The levels HARD and EXPERT have a MULTIPLIER.",0,-85,10)
+    screen.drawText("DIFFIUCULTY",0,100,25,"#00ff41")
+    screen.fillRect(0,60,200,40,"#3498db")
+    screen.drawText("EASY",0,60,15,"white")
+    screen.fillRect(0,20,200,40,"#2ecc71")
+    screen.drawText("NORMAL",0,20,15,"white")
+    screen.fillRect(0,-20,200,40,"#e67e22")
+    screen.drawText("HARD",0,-20,15,"white")
+    screen.fillRect(0,-60,200,40,"#e74c3c")
+    screen.drawText("EXPERT",0,-60,15,"white")
+    screen.fillRect(0,-120,160,40,"#c0392b")   -- Zurück
+    screen.drawText("BACK",0,-120,12,"white")
+
+  -- SHOP
+  elsif state == "SHOP" then
+    screen.drawText("SHOP",0,100,25,"#00ff41")
+    screen.fillRect(0,40,200,40,"#9b59b6")
+    screen.drawText("PURPLE SKIN - 150",0,40,12,"white")
+    screen.fillRect(0,0,200,40,"#1abc9c")
+    screen.drawText("GREEN SKIN - 300",0,0,12,"white")
+    if ad_cooldown<=0 then
+      screen.fillRect(0,-40,200,40,"#f39c12")
+      screen.drawText("WATCH AD +50",0,-40,12,"black")
+    else
+      screen.drawText("NEXT AD: IN A FEW SECONDS",0,-40,12,"#777")
+    end
+    screen.fillRect(0,-80,200,40,"#8e44ad")
+    screen.drawText("BACKGROUND - 500",0,-80,12,"white")
+    screen.fillRect(0,-120,160,40,"#c0392b")   -- Zurück
+    screen.drawText("BACK",0,-120,12,"white")
+
+  -- GAME
+  elsif state == "GAME" then
+    local skin = skins[owned_skin]
+    local draw_color = colors[player_color_index]
+    if grace_period>0 and floor(grace_period/4)%2==0 then
+      draw_color = "white"
+    end
+    -- PLAYER
+    screen.fillRect(player_x,player_y-60,15,80,skin)
+    screen.fillRound(player_x,player_y-15,26,26,skin)
+    screen.fillRect(player_x,player_y,balken_w,balken_h,draw_color)
+    screen.drawRect(player_x,player_y,balken_w+4,balken_h+4,"white")
+    -- OBJECTS
+    for o in objects
+      screen.fillRound(o.x,o.y,14,14,colors[o.c])
+    end
+    -- UI
+    screen.drawText("SCORE "+score,-screen.width/2+90,screen.height/2-20,12,"white")
+    local p = (change_interval-change_timer)/change_interval
+    screen.fillRect(-screen.width/2+(p*screen.width)/2,screen.height/2-5,p*screen.width,6,colors[player_color_index])
+
+  -- GAMEOVER
+  elsif state == "GAMEOVER" then
+    screen.drawText("GAME OVER",0,20,20,"#ff4d4d")
+    screen.drawText("POINTS  "+score,0,-10,14,"white")
+    screen.drawText("TAP",0,-50,10,"#aaa")
+  end
+end
+
+end()
+
+
+
+// file: source.ms
+function()
+
+end()
+
+
+</script></html>
