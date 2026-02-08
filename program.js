@@ -1,3 +1,10 @@
+document.addEventListener('deviceready', () => {
+  // Lädt eine Test-Werbung (damit du beim Testen kein Geld verlierst)
+  admob.interstitial.load({
+    adUnitId: 'ca-app-pub-3940256099942544/1033173712'
+  });
+}, false);
+
 this.Program = class Program {
   constructor() {
     this.statements = [];
