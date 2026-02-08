@@ -1,0 +1,10 @@
+{
+  "name": "com.lukottas4b22.labodash",
+  "version": "1.0.0",
+  "displayName": "Lab-O-Dash",
+  "dependencies": {
+    "@capacitor/android": "^5.0.0",
+    "@capacitor/core": "^5.0.0",
+    "admob-plus-capacitor": "^1.2.0"
+  }
+}
